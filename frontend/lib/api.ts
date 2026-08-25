@@ -1,7 +1,7 @@
 import { getSelectedUserId } from "./storage";
 import type { DemoUser, Quarry, BlockOut, SessionOut } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
 
 async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
@@ -9,15 +9,22 @@ async function call<T>(path: string, opts: RequestInit = {}): Promise<T> {
   };
   const selected = getSelectedUserId();
   if (selected) headers["x-selected-user-id"] = selected;
-  const res = await fetch(API_URL + path, { ...opts, headers });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API ${res.status}: ${text}`);
+  const fullUrl = `${API_URL}${path.startsWith("/") ? path : "/" + path}`;
+  try {
+    const res = await fetch(fullUrl, { ...opts, headers });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "<no body>");
+      console.error("API request failed", { url: fullUrl, status: res.status, body: text });
+      throw new Error(`API ${res.status}: ${text}`);
+    }
+    const ct = res.headers.get("content-type") || "";
+    if (ct.includes("application/json")) return res.json();
+    // fallback
+    return (await res.text()) as unknown as T;
+  } catch (err) {
+    console.error("API request error", { url: fullUrl, error: String(err) });
+    throw err;
   }
-  const ct = res.headers.get("content-type") || "";
-  if (ct.includes("application/json")) return res.json();
-  // fallback
-  return (await res.text()) as unknown as T;
 }
 
 export async function listDemoUsers(): Promise<DemoUser[]> {

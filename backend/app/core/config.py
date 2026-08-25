@@ -1,4 +1,4 @@
-from functools import lru_cache
+﻿from functools import lru_cache
 from typing import Literal
 
 from pydantic import Field
@@ -8,14 +8,21 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=(".env", "../.env"), extra="ignore")
 
-    database_url: str = "postgresql+psycopg://granite:granite@localhost:5432/granitemeasure"
+    # Use SQLite by default for local development to avoid requiring Postgres/Docker
+    database_url: str = "sqlite:///./granitemeasure.db"
+    # If you need Postgres locally, override DATABASE_URL in backend/.env
     redis_url: str = "redis://localhost:6379/0"
     supabase_url: str = ""
     supabase_service_role_key: str = ""
     supabase_storage_bucket: str = "granitemeasure"
     storage_backend: Literal["local", "supabase"] = "local"
     local_storage_dir: str = "./storage"
-    cors_origins: str = "http://localhost:3000"
+
+    # Comma-separated origins. Include common local development ports by default.
+    cors_origins: str = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
+
+    # Database init mode: set to 'create' to create tables on startup for local development
+    database_init_mode: str = "none"
 
     granite_detection_model_path: str = ""
     granite_segmentation_model_path: str = ""
