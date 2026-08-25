@@ -13,16 +13,51 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
 
+  const [healthOk, setHealthOk] = useState<boolean | null>(null);
+  const [healthChecking, setHealthChecking] = useState(false);
+
+  async function checkHealth() {
+    setHealthChecking(true);
+    setHealthOk(null);
+    try {
+      const API_URL = (process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(`${API_URL}/health`, { signal: controller.signal });
+      clearTimeout(timeout);
+      if (!res.ok) throw new Error(`Health check returned ${res.status}`);
+      const body = await res.json().catch(() => ({}));
+      setHealthOk(true);
+      setError(null);
+      return body;
+    } catch (e: unknown) {
+      setHealthOk(false);
+      setError(String(e));
+      return null;
+    } finally {
+      setHealthChecking(false);
+    }
+  }
+
   useEffect(() => {
     const local = getSelectedUserId();
     if (local) {
       // quick continue
       setSelected(local);
     }
-    listDemoUsers()
-      .then((u) => setUsers(u))
-      .catch((e) => setError(String(e)))
-      .finally(() => setLoading(false));
+
+    // Check backend health first, then load users
+    (async () => {
+      const ok = await checkHealth();
+      if (ok) {
+        listDemoUsers()
+          .then((u) => setUsers(u))
+          .catch((e) => setError(String(e)))
+          .finally(() => setLoading(false));
+      } else {
+        setLoading(false);
+      }
+    })();
   }, []);
 
   function onContinue() {
@@ -41,6 +76,17 @@ export default function Home() {
 
         <div className="bg-white/5 rounded-xl p-4 space-y-4">
           <h3 className="text-lg font-semibold">Select Your User</h3>
+
+          {healthChecking && <div className="text-sm text-white/70">Checking backend health…</div>}
+
+          {healthOk === false && (
+            <div className="text-sm text-red-400 flex items-center gap-2">
+              <div>Backend unreachable: {error ?? ""}</div>
+              <button className="underline" onClick={() => checkHealth()}>Retry health check</button>
+            </div>
+          )}
+
+          {healthOk === true && <div className="text-sm text-emerald-400">Backend reachable</div>}
 
           {loading && <div className="text-sm text-white/70">Loading users…</div>}
 
