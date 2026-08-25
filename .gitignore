@@ -17,3 +17,5 @@ frontend/.env.local
 *.log
 .DS_Store
 Thumbs.db
+
+backend/granitemeasure.db
