@@ -13,12 +13,6 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./granitemeasure.db"
     database_init_mode: Literal["none", "create"] = "create"
 
-<<<<<<< HEAD
-=======
-    # Use SQLite by default for local development to avoid requiring Postgres/Docker
-    database_url: str = "sqlite:///./granitemeasure.db"
-    # If you need Postgres locally, override DATABASE_URL in backend/.env
->>>>>>> agents/pasted-text-processing
     redis_url: str = "redis://localhost:6379/0"
 
     supabase_url: str = ""
@@ -28,15 +22,12 @@ class Settings(BaseSettings):
     storage_backend: Literal["local", "supabase"] = "local"
     local_storage_dir: str = "./storage"
 
-<<<<<<< HEAD
-    cors_origins: str = "http://localhost:3000"
-=======
-    # Comma-separated origins. Include common local development ports by default.
-    cors_origins: str = "http://localhost:3000,http://localhost:3001,http://127.0.0.1:3000,http://127.0.0.1:3001"
-
-    # Database init mode: set to 'create' to create tables on startup for local development
-    database_init_mode: str = "none"
->>>>>>> agents/pasted-text-processing
+    cors_origins: str = (
+        "http://localhost:3000,"
+        "http://localhost:3001,"
+        "http://127.0.0.1:3000,"
+        "http://127.0.0.1:3001"
+    )
 
     granite_detection_model_path: str = ""
     granite_segmentation_model_path: str = ""
@@ -45,14 +36,13 @@ class Settings(BaseSettings):
     aruco_marker_size_cm: float = 10.0
     aruco_dictionary: str = "DICT_5X5_100"
 
-    max_image_bytes: int = 15_728_640
+    max_image_bytes: int = 15728640
     allowed_image_mime_types: str = "image/jpeg,image/png,image/webp"
 
     demo_mode: bool = False
     seed_demo_users: bool = False
 
     default_granite_density_t_m3: float | None = None
-
     rate_limit_per_minute: int = 120
 
     @property
