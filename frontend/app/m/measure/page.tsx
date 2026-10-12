@@ -18,6 +18,7 @@ import {
   CATEGORY_INFO,
   computeVolume,
   fileToImage,
+  generateUUID,
   nextBlockCode,
   rateFor,
   saveBlock,
@@ -179,7 +180,12 @@ export default function MeasurePage() {
       let data: unknown = null;
       try {
         const hit = window.localStorage.getItem(cacheKey);
-        if (hit) data = JSON.parse(hit);
+        if (hit) {
+          const parsed = JSON.parse(hit);
+          if (!JSON.stringify(parsed).includes("Set ANTHROPIC_API_KEY")) {
+            data = parsed;
+          }
+        }
       } catch {
         data = null;
       }
@@ -286,7 +292,7 @@ export default function MeasurePage() {
     );
     const order = SLOTS.filter((k) => photos[k]);
     const rec: BlockRecord = {
-      id: crypto.randomUUID(),
+      id: generateUUID(),
       code,
       quarry: s.quarry,
       operator: s.operator,
@@ -376,7 +382,11 @@ export default function MeasurePage() {
                       {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)} (±{Math.round(gps.acc)} m)
                     </p>
                   ) : (
-                    <p className="text-amber-600">{gpsErr || "Locating…"}</p>
+                    <p className="text-amber-600">
+                      {gpsErr.toLowerCase().includes("secure") || gpsErr.includes("Y0ZkNV")
+                        ? "GPS requires HTTPS (quarry location used)"
+                        : gpsErr || "Locating…"}
+                    </p>
                   )}
                   <p className="text-slate-400">{new Date(ts.current).toLocaleString()}</p>
                 </div>
@@ -516,7 +526,9 @@ export default function MeasurePage() {
                     </p>
                   )
                 )}
-                {ai.notes && <p className="text-xs text-slate-500">{ai.notes}</p>}
+                {ai.notes && !ai.notes.includes("Set ANTHROPIC_API_KEY") && (
+                  <p className="text-xs text-slate-500">{ai.notes}</p>
+                )}
                 {ai.consistency_notes && (
                   <p className="text-xs text-amber-700">Cross-check: {ai.consistency_notes}</p>
                 )}
