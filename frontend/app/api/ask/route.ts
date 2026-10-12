@@ -16,23 +16,11 @@ export async function POST(req: Request) {
   }
 
   if (!claudeConfigured()) {
-    const qLower = question.toLowerCase();
-    let answer = "GraniteMeasure AI computes granite block volume as (Length × Width × Height × fill factor). Indicative mass is Volume (m³) × rock density (typically 2.7 MT/m³). Seigniorage is assessed according to AP Minor Mineral Concession Rules, with distinct gazetted rates per cubic metre / MT for Gangsaw size (≥ 270 × 150 cm) vs below Gangsaw size.";
-    if (qLower.includes("gangsaw") || qLower.includes("size") || qLower.includes("cut")) {
-      answer = "Gangsaw dimension threshold is 270 cm length × 150 cm height. Blocks meeting or exceeding these dimensions qualify as Gangsaw quality and command premium statutory rates.";
-    } else if (qLower.includes("seigniorage") || qLower.includes("rate") || qLower.includes("fee") || qLower.includes("tax")) {
-      answer = "Seigniorage fee is assessed by granite variety: Black Galaxy, Black Granite (other), Colour Group A (Srikakulam Blue, Moon White, River White), Colour Group B (Silver Waves, Madanapalli White), and Colour Others, factored by gangsaw qualification.";
-    } else if (qLower.includes("weighbridge") || qLower.includes("dispatch") || qLower.includes("transit")) {
-      answer = "Weighbridge cross-validation verifies gross vehicle weighbridge slips against photogrammetric calculated mass within ±5% tolerance before e-transit permit dispatch.";
-    } else if (qLower.includes("block") || qLower.includes("ledger") || qLower.includes("total")) {
-      const count = Array.isArray(ledger) ? ledger.length : 0;
-      answer = `The ledger currently has ${count} recorded block(s). Each record includes 3D extents, defect annotations, usable slab yield, and statutory seigniorage.`;
-    }
-    return NextResponse.json({
-      answer: `${answer}\n\n(Tip: Add ANTHROPIC_API_KEY to frontend/.env.local for full conversational Claude reasoning.)`,
-    });
+    return NextResponse.json(
+      { error: "ANTHROPIC_API_KEY is not set on the server." },
+      { status: 503 },
+    );
   }
-
   try {
     const answer = await callClaude({
       system: SYSTEM,

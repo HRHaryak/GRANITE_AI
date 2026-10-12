@@ -60,10 +60,10 @@ export default function AskPage() {
       const data = await res.json();
       setMsgs((m) => [
         ...m,
-        { role: "ai", text: res.ok ? data.answer : `⚠ ${data.error}` },
+        { role: "ai", text: res.ok ? data.answer : `Error: ${data.error}` },
       ]);
     } catch {
-      setMsgs((m) => [...m, { role: "ai", text: "⚠ Network error." }]);
+      setMsgs((m) => [...m, { role: "ai", text: "Error: network error" }]);
     } finally {
       setBusy(false);
     }

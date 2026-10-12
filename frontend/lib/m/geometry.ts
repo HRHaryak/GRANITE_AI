@@ -10,6 +10,8 @@ export type Prism = {
   type: string;
   severity: string;
   reason: string;
+  /** Surface defect: excluded only to a limited depth, not through the whole block. */
+  surface?: boolean;
 };
 export type Cuboid = { x: Range; y: Range; z: Range };
 
@@ -40,8 +42,16 @@ function mapFace(
   }
 }
 
-/** Each MAJOR/REJECT defect is assumed to run through the full depth of the block. */
-export function zonesFromFaces(faces: FaceReport[]): Prism[] {
+const SURFACE_TYPES = new Set(["chip", "weathered", "soil", "other"]);
+export const SURFACE_DEPTH_CM = 20;
+export const MAJOR_DEPTH_CM = 30;
+
+/**
+ * MAJOR/REJECT defects become excluded zones. Only REJECT defects (cracks, voids, holes that split
+ * or hollow the block) run through the full depth. MAJOR defects are localised, so they reach
+ * MAJOR_DEPTH_CM into the block, and surface defects (chips, weathered patches) SURFACE_DEPTH_CM.
+ */
+export function zonesFromFaces(faces: FaceReport[], gross?: Dims): Prism[] {
   const out: Prism[] = [];
   for (const f of faces) {
     const fb = f.face_box && f.face_box.length === 4 ? f.face_box : [0, 0, 1, 1];
@@ -54,8 +64,23 @@ export function zonesFromFaces(faces: FaceReport[]): Prism[] {
       if (u[1] - u[0] < 0.01 || v[1] - v[0] < 0.01) continue;
       const m = mapFace(f.face, u, v);
       if (!m) continue;
+      const surface =
+        (SURFACE_TYPES.has(d.type) || d.severity === "MAJOR") &&
+        !!gross && gross.l > 0 && gross.w > 0 && gross.h > 0;
+      if (surface) {
+        const depth = SURFACE_TYPES.has(d.type) ? SURFACE_DEPTH_CM : MAJOR_DEPTH_CM;
+        const dl = Math.min(1, depth / gross!.l);
+        const dw = Math.min(1, depth / gross!.w);
+        const dh = Math.min(1, depth / gross!.h);
+        if (f.face === "FRONT") m.y = [0, dw];
+        else if (f.face === "BACK") m.y = [1 - dw, 1];
+        else if (f.face === "LEFT") m.x = [0, dl];
+        else if (f.face === "RIGHT") m.x = [1 - dl, 1];
+        else if (f.face === "TOP") m.z = [1 - dh, 1];
+      }
       out.push({
         ...m,
+        surface,
         photo: f.photo,
         face: f.face,
         type: d.type,
@@ -177,7 +202,7 @@ export function explain(
     if (z.y[1] - z.y[0] < 0.99) part.push(`width ${pctRange(z.y)}`);
     if (z.z[1] - z.z[0] < 0.99) part.push(`height ${pctRange(z.z)}`);
     lines.push(
-      `Photo ${z.photo} (${z.face}): ${z.type} (${z.severity}) — ${z.reason}. It is carried through the whole block, so ${part.join(", ") || "the full block"} is excluded.`,
+      `Photo ${z.photo} (${z.face}): ${z.type} (${z.severity}) — ${z.reason}. ${z.surface ? `It is a localised defect, so only the outer ${SURFACE_DEPTH_CM}-${MAJOR_DEPTH_CM} cm is excluded (${part.join(", ") || "the area"}).` : `It is carried through the whole block, so ${part.join(", ") || "the full block"} is excluded.`}`,
     );
   });
   const trims: string[] = [];

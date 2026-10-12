@@ -30,6 +30,17 @@ export default function SettingsPage() {
             <input type="number" className={input} value={s.dressingCm} onChange={(e) => setS({ ...s, dressingCm: Number(e.target.value) })} />
           </label>
           <label className="block text-[11px] font-semibold text-slate-500">
+            Weight and fee are calculated on
+            <select
+              className={input}
+              value={s.feeBasis}
+              onChange={(e) => setS({ ...s, feeBasis: e.target.value as "RAW" | "USEFUL" })}
+            >
+              <option value="RAW">Raw block as quarried (like manual L×B×H)</option>
+              <option value="USEFUL">Useful block after defects and dressing</option>
+            </select>
+          </label>
+          <label className="block text-[11px] font-semibold text-slate-500">
             Printed marker size (cm, black square)
             <input type="number" className={input} value={s.markerCm} onChange={(e) => setS({ ...s, markerCm: Number(e.target.value) })} />
           </label>

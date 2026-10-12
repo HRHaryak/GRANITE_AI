@@ -61,6 +61,11 @@ function Detail() {
     <div>
       <Header title={b.code} subtitle={b.quarry} back="/m/blocks" />
       <div className="space-y-4 p-4">
+        {b.source === "DEMO" && (
+          <div className="rounded-xl bg-red-600 p-3 text-center text-sm font-bold text-white">
+            DEMO MODE — SIMULATED RESULTS
+          </div>
+        )}
         {!b.faces && b.thumbs[0] && (
           <div className="relative overflow-hidden rounded-2xl bg-black">
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -80,18 +85,17 @@ function Detail() {
 
         <div className="rounded-3xl bg-gradient-to-br from-[#14532d] to-[#16a34a] p-5 text-white">
           <p className="text-xs uppercase tracking-wide text-green-100">
-            {b.condition === "DRESSED" ? "Dressed block" : "Final dressed block"}
+            {b.feeBasis === "RAW" ? "Raw block (billing basis)" : b.condition === "DRESSED" ? "Dressed block" : "Final dressed block"}
           </p>
           <p className="text-4xl font-bold">
             {b.volumeM3.toFixed(2)}
             <span className="ml-1 text-lg font-medium">m³</span>
           </p>
           {(() => {
-            const d = b.usable ?? {
-              l: b.lengthCm,
-              w: b.widthCm,
-              h: b.heightCm,
-            };
+            const d =
+              b.feeBasis === "RAW" || !b.usable
+                ? { l: b.lengthCm, w: b.widthCm, h: b.heightCm }
+                : b.usable;
             return (
               <p className="mt-1 text-sm font-medium">
                 {(d.l / 100).toFixed(2)} × {(d.w / 100).toFixed(2)} ×{" "}
@@ -127,7 +131,26 @@ function Detail() {
           </div>
         </div>
 
-        {b.rawVolumeM3 != null && (
+        {b.feeBasis === "RAW" && b.usable && b.usableVolumeM3 != null && (
+          <div className="rounded-3xl bg-gradient-to-br from-[#0b3a3f] to-[#15808a] p-5 text-white">
+            <p className="text-xs uppercase tracking-wide text-teal-100">
+              Useful block after defects and dressing
+            </p>
+            <p className="text-2xl font-bold">
+              {b.usableVolumeM3.toFixed(2)}
+              <span className="ml-1 text-base font-medium">m³</span>
+              <span className="ml-2 text-sm font-medium text-teal-100">
+                {b.rawVolumeM3 ? ((b.usableVolumeM3 / b.rawVolumeM3) * 100).toFixed(0) : "?"}% of raw
+              </span>
+            </p>
+            <p className="mt-1 text-sm">
+              {(b.usable.l / 100).toFixed(2)} × {(b.usable.w / 100).toFixed(2)} ×{" "}
+              {(b.usable.h / 100).toFixed(2)} m
+            </p>
+          </div>
+        )}
+
+        {b.feeBasis !== "RAW" && b.rawVolumeM3 != null && (
           <div className="rounded-3xl bg-gradient-to-br from-[#0b3a3f] to-[#15808a] p-5 text-white">
             <p className="text-xs uppercase tracking-wide text-teal-100">
               Raw block as quarried
@@ -136,7 +159,7 @@ function Detail() {
               {b.rawVolumeM3.toFixed(2)}
               <span className="ml-1 text-base font-medium">m³</span>
               <span className="ml-2 text-sm font-medium text-teal-100">
-                dressed = {((b.volumeM3 / b.rawVolumeM3) * 100).toFixed(0)}% of raw
+                useful = {((b.volumeM3 / b.rawVolumeM3) * 100).toFixed(0)}% of raw
               </span>
             </p>
             <p className="mt-1 text-sm">

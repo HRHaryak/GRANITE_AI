@@ -37,7 +37,14 @@ export async function callClaude(body: {
     }
   }
   if (!res.ok) {
-    throw new Error(`Claude API ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const raw = await res.text();
+    let msg = raw.slice(0, 200);
+    try {
+      msg = JSON.parse(raw)?.error?.message ?? msg;
+    } catch {
+      // keep raw text
+    }
+    throw new Error(`${msg} (${res.status})`);
   }
   const data = await res.json();
   return (data.content ?? [])

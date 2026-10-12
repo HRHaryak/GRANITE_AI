@@ -90,7 +90,7 @@ export function MethodCard({ v }: { v: MethodValues }) {
           <li><b>Defect type:</b> crack, hole, void, weathered zone, strong vein, chipped corner. Surface soil or dust is ignored because it washes off.</li>
           <li><b>Severity:</b> MINOR (cosmetic, kept), MAJOR (reduces usable stone, excluded), REJECT (unusable, excluded).</li>
           <li><b>Defect extent:</b> a box around each MAJOR/REJECT defect, with a safety margin around cracks and holes. {v.zones != null && <>This block has <b>{v.zones}</b> excluded zone{v.zones === 1 ? "" : "s"} across {v.faces ?? 5} photos.</>}</li>
-          <li><b>Through-depth rule:</b> a bad zone seen on one face is assumed to run through the whole block. If half the top face is cracked, that half is removed from every side.</li>
+          <li><b>Depth rule:</b> a REJECT defect (a crack, void or hole that splits the block) is assumed to run through the whole block, so if half the top face is cracked, that half is removed from every side. MAJOR and surface defects (chips, weathered patches) are localised and only excluded 20-30 cm deep.</li>
           <li><b>Largest clean block:</b> the app searches every rectangular block that avoids all excluded zones and keeps the one with the biggest volume.</li>
           <li>
             <b>Dressing allowance:</b>{" "}
@@ -108,7 +108,7 @@ export function MethodCard({ v }: { v: MethodValues }) {
         </ul>
         <p className="pt-1 font-semibold text-slate-700">How the result is checked</p>
         <ul className="list-disc space-y-1 pl-4">
-          <li><b>Tape check:</b> the officer types the real L, W, H; the app shows the % difference and passes at 90% match (within 10%).</li>
+          <li><b>Tape check:</b> the officer types the real L, W, H; the app shows the % difference for each dimension.</li>
           <li><b>Weighbridge:</b> AI weight is compared with the weighbridge and dispatch weights, flagged beyond ±{v.tolerancePct}%.</li>
         </ul>
         <p className="rounded-lg bg-white p-2">

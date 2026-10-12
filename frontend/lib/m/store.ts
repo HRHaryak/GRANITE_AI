@@ -77,6 +77,8 @@ export type BlockRecord = {
   hash: string;
   weighbridge?: Weighbridge;
   condition?: "RAW" | "DRESSED";
+  /** Which volume weight and fee were computed on. */
+  feeBasis?: "RAW" | "USEFUL";
   rawVolumeM3?: number;
   faces?: FaceReport[];
   /** Final dressed dimensions (cm). lengthCm/widthCm/heightCm hold the raw bounding box. */
@@ -98,6 +100,8 @@ export type Settings = {
   dressingCm: number;
   /** Side length (cm) of the printed ArUco marker, black square only. */
   markerCm: number;
+  /** Volume used for weight and fee: the raw block as quarried (how officers measure today) or the useful block after defects and dressing. */
+  feeBasis: "RAW" | "USEFUL";
   rates: Record<string, { above: number; below: number }>;
 };
 
@@ -143,6 +147,7 @@ export const DEFAULT_SETTINGS: Settings = {
   tolerancePct: 10,
   dressingCm: 5,
   markerCm: 40,
+  feeBasis: "USEFUL",
   // Seigniorage rates currently in force (Rs per MT).
   rates: {
     "Black Galaxy": { above: 1830, below: 1530 },
@@ -397,7 +402,7 @@ export function demoBlocks(s: Settings): BlockRecord[] {
     };
   };
   return [
-    mk(1, "Black Galaxy", 240, 130, 110, 0.92, 24.1),
+    mk(1, "Colour Others", 265, 145, 125, 1, 12.9),
     mk(2, "Colour Group A", 210, 120, 100, 0.85, 15.9),
     mk(3, "Black Granite (other)", 290, 160, 120, 0.9, null),
     mk(4, "Colour Others", 190, 110, 95, 0.78, 12.6),
@@ -426,10 +431,14 @@ export function omepsPayload(b: BlockRecord) {
       condition: b.condition ?? null,
       confidence: b.confidence,
       uncertainty_pct: b.uncertaintyPct ?? null,
-      dimensions_cm: b.usable
-        ? { l: b.usable.l, w: b.usable.w, h: b.usable.h }
-        : { l: b.lengthCm, w: b.widthCm, h: b.heightCm },
+      billing_basis: b.feeBasis ?? "USEFUL",
+      dimensions_cm:
+        b.feeBasis === "RAW" || !b.usable
+          ? { l: b.lengthCm, w: b.widthCm, h: b.heightCm }
+          : { l: b.usable.l, w: b.usable.w, h: b.usable.h },
       raw_dimensions_cm: { l: b.lengthCm, w: b.widthCm, h: b.heightCm },
+      useful_dimensions_cm: b.usable ?? null,
+      useful_volume_m3: b.usableVolumeM3 != null ? +b.usableVolumeM3.toFixed(3) : null,
       volume_m3: +b.volumeM3.toFixed(3),
       density_t_m3: +(b.weightT / (b.volumeM3 || 1)).toFixed(2),
       weight_mt: +b.weightT.toFixed(3),

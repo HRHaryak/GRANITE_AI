@@ -78,6 +78,37 @@ const SLOT_HINT: Record<string, string> = {
   EXTRA: "Optional close-up",
 };
 
+/** Bump when the analysis method changes, so stored results from an older method are not reused. */
+const ANALYSIS_VERSION = "v3";
+
+type Img = { data: string; face: string };
+
+/** One analysis request. Same photos return the stored answer instead of calling the AI again. */
+async function fetchAnalysis(images: Img[]): Promise<unknown> {
+  const cacheKey = `gm.ai.${ANALYSIS_VERSION}.${await sha256(images.map((i) => `${i.face}|${i.data}`).join("\n"))}`;
+  try {
+    const hit = window.localStorage.getItem(cacheKey);
+    if (hit) return JSON.parse(hit);
+  } catch {
+    // ignore unreadable cache
+  }
+  const res = await fetch("/api/measure", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ images }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? "Analysis failed");
+  try {
+    window.localStorage.setItem(cacheKey, JSON.stringify(data));
+  } catch {
+    // storage full: skip caching
+  }
+  return data;
+}
+
+const sigOf = (images: Img[]) => images.map((i) => `${i.face}:${i.data.length}:${i.data.slice(-48)}`).join("|");
+
 const m = (cm: number) => `${(cm / 100).toFixed(2)} m (${cm.toFixed(0)} cm)`;
 
 export default function MeasurePage() {
@@ -102,6 +133,7 @@ export default function MeasurePage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const multiRef = useRef<HTMLInputElement>(null);
   const slotRef = useRef<string>("FRONT");
+  const prefetch = useRef<{ sig: string; p: Promise<unknown> } | null>(null);
   const ts = useRef(new Date().toISOString());
 
   useEffect(() => {
@@ -120,6 +152,16 @@ export default function MeasurePage() {
 
   const taken = SLOTS.filter((k) => photos[k]);
   const ready = FACES.every((k) => photos[k]);
+
+  useEffect(() => {
+    if (!ready || step !== "photos") return;
+    const images = SLOTS.filter((k) => photos[k]).map((k) => ({ data: photos[k].full, face: k }));
+    const sig = sigOf(images);
+    if (prefetch.current?.sig === sig) return;
+    const p = fetchAnalysis(images);
+    p.catch(() => undefined);
+    prefetch.current = { sig, p };
+  }, [ready, photos, step]);
 
   async function load(f: File) {
     return {
@@ -175,34 +217,11 @@ export default function MeasurePage() {
     setError("");
     try {
       const images = taken.map((k) => ({ data: photos[k].full, face: k }));
-      // Same photos → same stored answer, even after a server restart.
-      const cacheKey = `gm.ai.${await sha256(images.map((i) => `${i.face}|${i.data}`).join("\n"))}`;
-      let data: unknown = null;
-      try {
-        const hit = window.localStorage.getItem(cacheKey);
-        if (hit) {
-          const parsed = JSON.parse(hit);
-          if (!JSON.stringify(parsed).includes("Set ANTHROPIC_API_KEY")) {
-            data = parsed;
-          }
-        }
-      } catch {
-        data = null;
-      }
-      if (!data) {
-        const res = await fetch("/api/measure", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ images }),
-        });
-        data = await res.json();
-        if (!res.ok) throw new Error((data as { error?: string }).error ?? "Analysis failed");
-        try {
-          window.localStorage.setItem(cacheKey, JSON.stringify(data));
-        } catch {
-          // storage full: skip caching
-        }
-      }
+      const sig = sigOf(images);
+      const p =
+        prefetch.current?.sig === sig ? prefetch.current.p : fetchAnalysis(images);
+      // Analysis starts when the fifth photo is added, so it is often ready already; the loading view lasts at least 4 seconds.
+      const [data] = await Promise.all([p, new Promise((r) => setTimeout(r, 4000))]);
       const r = data as Ai;
       r.faces = (r.faces ?? []).map((f) => ({ ...f, defects: f.defects ?? [] }));
       // Open-source metric scale: printed ArUco marker + homography, when a marker was found.
@@ -254,15 +273,18 @@ export default function MeasurePage() {
     setStep("result");
   }
 
-  const zones = useMemo(() => (ai ? zonesFromFaces(ai.faces) : []), [ai]);
+  const zones = useMemo(() => (ai ? zonesFromFaces(ai.faces, dims) : []), [ai, dims]);
   const cuboid = useMemo(() => bestCuboid(zones), [zones]);
   const fin: Dims = ai
     ? finalDims(cuboid, dims, s.dressingCm, condition === "RAW")
     : dims;
   const vol = computeVolume(fin.l, fin.w, fin.h, 1);
   const rawVol = computeVolume(dims.l, dims.w, dims.h, fill);
-  const weight = vol * s.density;
-  const slab = slabFor(fin.l, fin.w, fin.h);
+  const onRaw = !!ai && s.feeBasis === "RAW";
+  const billVol = onRaw ? rawVol : vol;
+  const billDims = onRaw ? dims : fin;
+  const weight = billVol * s.density;
+  const slab = slabFor(billDims.l, billDims.w, billDims.h);
   const rate = rateFor(s, category, slab);
   const fee = weight * rate;
   const unc = ai?.gross.uncertainty_pct ?? 0;
@@ -279,7 +301,6 @@ export default function MeasurePage() {
   const tapeDiffs = (["l", "w", "h"] as const)
     .map((k) => diff(fin[k], tapeNum[k]))
     .filter((d): d is number => d != null);
-  const tapeOk = tapeDiffs.length > 0 && tapeDiffs.every((d) => Math.abs(d) <= 10);
 
   function editDim(k: keyof Dims, v: number) {
     setDims((d) => ({ ...d, [k]: v }));
@@ -307,9 +328,10 @@ export default function MeasurePage() {
       heightCm: dims.h,
       fill,
       category,
-      volumeM3: vol,
+      volumeM3: billVol,
       condition,
-      rawVolumeM3: ai && condition === "RAW" ? rawVol : undefined,
+      feeBasis: onRaw ? ("RAW" as const) : ("USEFUL" as const),
+      rawVolumeM3: ai ? rawVol : undefined,
       weightT: weight,
       slab,
       ratePerMT: rate,
@@ -382,11 +404,7 @@ export default function MeasurePage() {
                       {gps.lat.toFixed(5)}, {gps.lng.toFixed(5)} (±{Math.round(gps.acc)} m)
                     </p>
                   ) : (
-                    <p className="text-amber-600">
-                      {gpsErr.toLowerCase().includes("secure") || gpsErr.includes("Y0ZkNV")
-                        ? "GPS requires HTTPS (quarry location used)"
-                        : gpsErr || "Locating…"}
-                    </p>
+                    <p className="text-amber-600">{gpsErr || "Locating…"}</p>
                   )}
                   <p className="text-slate-400">{new Date(ts.current).toLocaleString()}</p>
                 </div>
@@ -485,7 +503,7 @@ export default function MeasurePage() {
             <p className="font-semibold text-slate-700">Inspecting block…</p>
             <p className="text-xs text-slate-500">
               Measuring each face, finding cracks and holes, and working out the
-              final usable block. This takes 20–40 seconds.
+              final usable block.
             </p>
           </Card>
         )}
@@ -526,9 +544,7 @@ export default function MeasurePage() {
                     </p>
                   )
                 )}
-                {ai.notes && !ai.notes.includes("Set ANTHROPIC_API_KEY") && (
-                  <p className="text-xs text-slate-500">{ai.notes}</p>
-                )}
+                {ai.notes && <p className="text-xs text-slate-500">{ai.notes}</p>}
                 {ai.consistency_notes && (
                   <p className="text-xs text-amber-700">Cross-check: {ai.consistency_notes}</p>
                 )}
@@ -536,22 +552,29 @@ export default function MeasurePage() {
             )}
 
             <div className="rounded-3xl bg-gradient-to-br from-[#14532d] to-[#16a34a] p-5 text-white">
-              <p className="text-xs uppercase tracking-wide text-green-100">Total useful block</p>
+              <p className="text-xs uppercase tracking-wide text-green-100">
+                {onRaw ? "Raw block (billing basis)" : "Total useful block"}
+              </p>
               <p className="text-4xl font-bold">
-                {vol.toFixed(2)}
+                {billVol.toFixed(2)}
                 <span className="ml-1 text-lg font-medium">m³</span>
               </p>
               {ai && unc > 0 && (
                 <p className="text-xs text-green-100">
-                  likely {(vol * (1 - unc / 100)).toFixed(2)} – {(vol * (1 + unc / 100)).toFixed(2)} m³
+                  likely {(billVol * (1 - unc / 100)).toFixed(2)} – {(billVol * (1 + unc / 100)).toFixed(2)} m³
                 </p>
               )}
-              {valid && (
+              {billDims.l > 0 && (
                 <p className="mt-2 text-sm font-medium">
-                  {m(fin.l)} × {m(fin.w)} × {m(fin.h)}
+                  {m(billDims.l)} × {m(billDims.w)} × {m(billDims.h)}
                 </p>
               )}
-              {ai && rawVol > 0 && (
+              {ai && onRaw && vol > 0 && (
+                <p className="text-xs text-green-100">
+                  Useful block after defects and dressing: {vol.toFixed(2)} m³ ({fin.l} × {fin.w} × {fin.h} cm), {rawVol > 0 ? ((vol / rawVol) * 100).toFixed(0) : 0}% of the raw block
+                </p>
+              )}
+              {ai && !onRaw && rawVol > 0 && (
                 <p className="text-xs text-green-100">
                   = {((vol / rawVol) * 100).toFixed(0)}% of the {rawVol.toFixed(2)} m³ raw block
                 </p>
@@ -670,8 +693,8 @@ export default function MeasurePage() {
                 })}
               </div>
               {tapeDiffs.length > 0 && (
-                <p className={`rounded-xl p-2 text-center text-xs font-semibold ${tapeOk ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-700"}`}>
-                  {tapeOk ? "✓ Within 10% of tape — 90%+ match" : "Outside 10% of tape — check sizes"}
+                <p className="rounded-xl bg-slate-50 p-2 text-center text-xs font-semibold text-slate-600">
+                  Largest difference from tape: {Math.max(...tapeDiffs.map((d) => Math.abs(d))).toFixed(1)}%
                 </p>
               )}
             </Card>

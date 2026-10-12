@@ -152,6 +152,11 @@ export function BlockRow({
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-slate-800">
           {b.code}
+          {b.source === "DEMO" && (
+            <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+              DEMO
+            </span>
+          )}
         </p>
         <p className="text-xs text-slate-500">
           {b.category} · {b.volumeM3.toFixed(2)} m³ · {b.weightT.toFixed(1)} t
