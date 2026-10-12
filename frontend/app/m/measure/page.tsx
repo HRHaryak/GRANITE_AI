@@ -35,6 +35,7 @@ import {
   explain,
   faceUseful,
   finalDims,
+  standardDressedDims,
   zonesFromFaces,
 } from "../../../lib/m/geometry";
 import { Badge, Card, FaceCards, Header } from "../../../components/m/ui";
@@ -99,10 +100,21 @@ export default function MeasurePage() {
   const [tape, setTape] = useState({ l: "", w: "", h: "" });
   const [fill, setFill] = useState(0.85);
   const [category, setCategory] = useState("Colour Others");
+  const [calcMode, setCalcMode] = useState<"STANDARD" | "DEFECT_CARVE">("STANDARD");
+  const [ignoredDefects, setIgnoredDefects] = useState<Set<string>>(new Set());
   const fileRef = useRef<HTMLInputElement>(null);
   const multiRef = useRef<HTMLInputElement>(null);
   const slotRef = useRef<string>("FRONT");
   const ts = useRef(new Date().toISOString());
+
+  function toggleDefect(key: string) {
+    setIgnoredDefects((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
 
   useEffect(() => {
     setCode(nextBlockCode());
@@ -176,7 +188,7 @@ export default function MeasurePage() {
     try {
       const images = taken.map((k) => ({ data: photos[k].full, face: k }));
       // Same photos → same stored answer, even after a server restart.
-      const cacheKey = `gm.ai.${await sha256(images.map((i) => `${i.face}|${i.data}`).join("\n"))}`;
+      const cacheKey = `gm.ai.v3.${await sha256(images.map((i) => `${i.face}|${i.data}`).join("\n"))}`;
       let data: unknown = null;
       try {
         const hit = window.localStorage.getItem(cacheKey);
@@ -254,11 +266,24 @@ export default function MeasurePage() {
     setStep("result");
   }
 
-  const zones = useMemo(() => (ai ? zonesFromFaces(ai.faces) : []), [ai]);
+  const zones = useMemo(
+    () => (ai ? zonesFromFaces(ai.faces, ignoredDefects) : []),
+    [ai, ignoredDefects],
+  );
   const cuboid = useMemo(() => bestCuboid(zones), [zones]);
-  const fin: Dims = ai
-    ? finalDims(cuboid, dims, s.dressingCm, condition === "RAW")
-    : dims;
+  const standardFin = useMemo(
+    () => standardDressedDims(dims, s.dressingCm, condition === "RAW"),
+    [dims, s.dressingCm, condition],
+  );
+  const carvedFin = useMemo(
+    () => (ai ? finalDims(cuboid, dims, s.dressingCm, condition === "RAW") : dims),
+    [ai, cuboid, dims, s.dressingCm, condition],
+  );
+  const fin: Dims = !ai
+    ? dims
+    : calcMode === "STANDARD" || zones.length === 0
+      ? standardFin
+      : carvedFin;
   const vol = computeVolume(fin.l, fin.w, fin.h, 1);
   const rawVol = computeVolume(dims.l, dims.w, dims.h, fill);
   const weight = vol * s.density;
@@ -268,7 +293,7 @@ export default function MeasurePage() {
   const unc = ai?.gross.uncertainty_pct ?? 0;
   const valid = fin.l > 0 && fin.w > 0 && fin.h > 0;
   const reasoning = ai
-    ? explain(zones, cuboid, dims, fin, condition === "RAW", s.dressingCm)
+    ? explain(zones, cuboid, dims, fin, condition === "RAW", s.dressingCm, calcMode)
     : "";
   const useful = Object.fromEntries(
     (ai?.faces ?? []).map((f) => [f.face, faceUseful(f.face, fin)]),
@@ -329,6 +354,7 @@ export default function MeasurePage() {
       reasoning,
       consistency: ai?.consistency_notes,
       tape: tapeNum.l || tapeNum.w || tapeNum.h ? tapeNum : undefined,
+      calcMode,
       viz: ai ? { zones, cuboid } : undefined,
     };
     saveBlock(rec);
@@ -535,6 +561,47 @@ export default function MeasurePage() {
               </Card>
             )}
 
+            {ai && (
+              <Card className="space-y-2.5 !p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-slate-700">Measurement Method</p>
+                  <span className="text-[11px] font-medium text-[#0f5257]">
+                    {calcMode === "STANDARD" ? "Standard Commercial Dressing" : `Strict Defect Carving (${zones.length} active)`}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCalcMode("STANDARD")}
+                    className={`rounded-2xl p-2.5 text-left transition border ${
+                      calcMode === "STANDARD"
+                        ? "border-[#0f5257] bg-[#0f5257]/10 text-[#0f5257] shadow-sm font-semibold"
+                        : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    <p className="text-xs font-bold">Standard Dressing</p>
+                    <p className="mt-0.5 text-[10px] text-slate-500 leading-tight">
+                      Statutory 5 cm allowance (~85–92% commercial yield)
+                    </p>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCalcMode("DEFECT_CARVE")}
+                    className={`rounded-2xl p-2.5 text-left transition border ${
+                      calcMode === "DEFECT_CARVE"
+                        ? "border-[#0f5257] bg-[#0f5257]/10 text-[#0f5257] shadow-sm font-semibold"
+                        : "border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                    }`}
+                  >
+                    <p className="text-xs font-bold">Defect Carving</p>
+                    <p className="mt-0.5 text-[10px] text-slate-500 leading-tight">
+                      Carves 3D exclusion zones ({zones.length} active)
+                    </p>
+                  </button>
+                </div>
+              </Card>
+            )}
+
             <div className="rounded-3xl bg-gradient-to-br from-[#14532d] to-[#16a34a] p-5 text-white">
               <p className="text-xs uppercase tracking-wide text-green-100">Total useful block</p>
               <p className="text-4xl font-bold">
@@ -587,8 +654,17 @@ export default function MeasurePage() {
 
             {ai && (
               <div>
-                <p className="mb-2 text-sm font-semibold text-slate-700">Side-by-side inspection</p>
-                <FaceCards faces={ai.faces} images={orderedImages} useful={useful} />
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-sm font-semibold text-slate-700">Side-by-side inspection</p>
+                  <p className="text-[11px] text-slate-400">Tap Dismiss to ignore false defects</p>
+                </div>
+                <FaceCards
+                  faces={ai.faces}
+                  images={orderedImages}
+                  useful={useful}
+                  ignoredDefects={ignoredDefects}
+                  onToggleDefect={toggleDefect}
+                />
               </div>
             )}
 

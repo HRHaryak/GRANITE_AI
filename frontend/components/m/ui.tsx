@@ -215,11 +215,15 @@ export function FaceCards({
   faces,
   images,
   useful,
+  ignoredDefects,
+  onToggleDefect,
 }: {
   faces: FaceReport[];
   images: string[];
   /** Useful width x height (cm) of the final block as seen on each face. */
   useful?: Record<string, [number, number] | null>;
+  ignoredDefects?: Set<string>;
+  onToggleDefect?: (key: string) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -243,14 +247,19 @@ export function FaceCards({
                 {f.reference_box && (
                   <Box b={f.reference_box} color="#38bdf8" label="Ref" />
                 )}
-                {f.defects.map((d, j) => (
-                  <Box
-                    key={j}
-                    b={d.box}
-                    color={SEV_COLOR[d.severity] ?? "#ef4444"}
-                    label={`${j + 1}`}
-                  />
-                ))}
+                {f.defects.map((d, j) => {
+                  const key = `${f.photo}-${f.face}-${j}`;
+                  const isIgnored = ignoredDefects?.has(key);
+                  if (isIgnored) return null;
+                  return (
+                    <Box
+                      key={j}
+                      b={d.box}
+                      color={SEV_COLOR[d.severity] ?? "#ef4444"}
+                      label={`${j + 1}`}
+                    />
+                  );
+                })}
               </div>
             )}
             <div className="h-2 overflow-hidden rounded-full bg-slate-100">
@@ -285,21 +294,44 @@ export function FaceCards({
             </div>
             <p className="text-xs text-slate-600">{f.explanation}</p>
             {f.defects.length > 0 && (
-              <ul className="space-y-1 text-xs">
-                {f.defects.map((d, j) => (
-                  <li key={j} className="flex gap-2">
-                    <span
-                      className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-black"
-                      style={{ background: SEV_COLOR[d.severity] ?? "#ef4444" }}
+              <ul className="space-y-1.5 text-xs">
+                {f.defects.map((d, j) => {
+                  const key = `${f.photo}-${f.face}-${j}`;
+                  const isIgnored = ignoredDefects?.has(key);
+                  return (
+                    <li
+                      key={j}
+                      className={`flex items-center justify-between gap-2 rounded-lg p-2 transition ${
+                        isIgnored ? "bg-slate-100 opacity-60" : "bg-slate-50"
+                      }`}
                     >
-                      {j + 1}
-                    </span>
-                    <span className="text-slate-600">
-                      <b className="capitalize">{d.type}</b> ({d.severity}):{" "}
-                      {d.reason}
-                    </span>
-                  </li>
-                ))}
+                      <div className="flex items-start gap-2 min-w-0">
+                        <span
+                          className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-black"
+                          style={{ background: isIgnored ? "#94a3b8" : SEV_COLOR[d.severity] ?? "#ef4444" }}
+                        >
+                          {j + 1}
+                        </span>
+                        <span className={`text-slate-600 ${isIgnored ? "line-through text-slate-400" : ""}`}>
+                          <b className="capitalize">{d.type}</b> ({d.severity}): {d.reason}
+                        </span>
+                      </div>
+                      {onToggleDefect && d.severity !== "MINOR" && (
+                        <button
+                          type="button"
+                          onClick={() => onToggleDefect(key)}
+                          className={`shrink-0 rounded-lg px-2.5 py-1 text-[11px] font-semibold transition ${
+                            isIgnored
+                              ? "bg-slate-200 text-slate-700 hover:bg-slate-300"
+                              : "bg-amber-100 text-amber-800 hover:bg-amber-200"
+                          }`}
+                        >
+                          {isIgnored ? "Ignored" : "Dismiss"}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </Card>

@@ -86,6 +86,8 @@ export type BlockRecord = {
   reasoning?: string;
   consistency?: string;
   tape?: Dims;
+  /** Measurement method used: STANDARD (dressing allowance) or DEFECT_CARVE (3D defect avoidance). */
+  calcMode?: "STANDARD" | "DEFECT_CARVE";
   /** Final block geometry as fractions of the raw bounding box. */
   viz?: { zones: Prism[]; cuboid: Cuboid };
 };

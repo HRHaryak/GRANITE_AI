@@ -21,38 +21,55 @@ function mapFace(
   face: string,
   u: Range,
   v: Range,
+  depthFraction = 0.15,
+  isThrough = false,
 ): { x: Range; y: Range; z: Range } | null {
   const zv: Range = [1 - v[1], 1 - v[0]];
   const ui: Range = [1 - u[1], 1 - u[0]];
+  const d = isThrough ? 1.0 : clamp(depthFraction);
   switch (face) {
     case "FRONT":
-      return { x: u, y: [0, 1], z: zv };
+      return { x: u, y: [0, d], z: zv };
     case "BACK":
-      return { x: ui, y: [0, 1], z: zv };
+      return { x: ui, y: [1 - d, 1], z: zv };
     case "RIGHT":
-      return { x: [0, 1], y: u, z: zv };
+      return { x: [1 - d, 1], y: u, z: zv };
     case "LEFT":
-      return { x: [0, 1], y: ui, z: zv };
+      return { x: [0, d], y: ui, z: zv };
     case "TOP":
-      return { x: u, y: [1 - v[1], 1 - v[0]], z: [0, 1] };
+      return { x: u, y: [1 - v[1], 1 - v[0]], z: [1 - d, 1] };
     default:
       return null;
   }
 }
 
-/** Each MAJOR/REJECT defect is assumed to run through the full depth of the block. */
-export function zonesFromFaces(faces: FaceReport[]): Prism[] {
+/**
+ * Maps 2D face defects into 3D exclusion prisms.
+ * Surface defects penetrate into dressing depth (default 15%),
+ * while REJECT or through-cracks cut through the entire block depth.
+ */
+export function zonesFromFaces(
+  faces: FaceReport[],
+  ignoredKeys?: Set<string>,
+): Prism[] {
   const out: Prism[] = [];
   for (const f of faces) {
     const fb = f.face_box && f.face_box.length === 4 ? f.face_box : [0, 0, 1, 1];
     const fw = Math.max(0.01, fb[2] - fb[0]);
     const fh = Math.max(0.01, fb[3] - fb[1]);
-    for (const d of f.defects ?? []) {
+    for (let idx = 0; idx < (f.defects ?? []).length; idx++) {
+      const d = f.defects[idx];
+      const key = `${f.photo}-${f.face}-${idx}`;
+      if (ignoredKeys && ignoredKeys.has(key)) continue;
       if (d.severity === "MINOR" || !d.box || d.box.length !== 4) continue;
       const u: Range = [clamp((d.box[0] - fb[0]) / fw), clamp((d.box[2] - fb[0]) / fw)];
       const v: Range = [clamp((d.box[1] - fb[1]) / fh), clamp((d.box[3] - fb[1]) / fh)];
       if (u[1] - u[0] < 0.01 || v[1] - v[0] < 0.01) continue;
-      const m = mapFace(f.face, u, v);
+      const isThrough =
+        d.severity === "REJECT" ||
+        /through|transverse|shear|split\s*across|split\s*through/i.test(d.reason || "");
+      const depthFraction = isThrough ? 1.0 : 0.15;
+      const m = mapFace(f.face, u, v, depthFraction, isThrough);
       if (!m) continue;
       out.push({
         ...m,
@@ -117,6 +134,21 @@ export function bestCuboid(zones: Prism[], N = 20): Cuboid {
   };
 }
 
+/** Standard commercial quarry dressed dimensions (Govt DMG statutory allowance). */
+export function standardDressedDims(
+  gross: Dims,
+  allowanceCm: number,
+  raw: boolean,
+): Dims {
+  if (!raw) return { ...gross };
+  const d = allowanceCm * 2;
+  return {
+    l: Math.max(0, Math.round((gross.l - d) * 10) / 10),
+    w: Math.max(0, Math.round((gross.w - d) * 10) / 10),
+    h: Math.max(0, Math.round((gross.h - d) * 10) / 10),
+  };
+}
+
 /** Final dressed size. For RAW blocks a dressing allowance is removed from every side that lies on the block surface. */
 export function finalDims(
   c: Cuboid,
@@ -164,11 +196,30 @@ export function explain(
   fin: Dims,
   raw: boolean,
   allowanceCm: number,
+  calcMode: "STANDARD" | "DEFECT_CARVE" = "DEFECT_CARVE",
 ): string {
   const lines: string[] = [];
+  if (calcMode === "STANDARD") {
+    if (raw) {
+      lines.push(
+        `Standard commercial dressing applied (DMG statutory rule): statutory ${allowanceCm} cm dressing allowance deducted on all faces (total ${allowanceCm * 2} cm per axis). Final dressed block: ${fin.l} × ${fin.w} × ${fin.h} cm.`,
+      );
+    } else {
+      lines.push(
+        `Dressed block: all faces already squared and dressed. Commercial block: ${fin.l} × ${fin.w} × ${fin.h} cm.`,
+      );
+    }
+    if (zones.length > 0) {
+      lines.push(
+        `Note: ${zones.length} defect zone(s) were flagged by AI. Switch to "Strict Defect Carving" to subtract 3D prisms if any represent unslabable structural cracks.`,
+      );
+    }
+    return lines.join("\n");
+  }
+
   if (zones.length === 0) {
     lines.push(
-      "No major defects were found on any face, so the whole block body is usable.",
+      "No major defects were found on any face, so the whole block body is sound and usable.",
     );
   }
   zones.forEach((z) => {
@@ -176,9 +227,19 @@ export function explain(
     if (z.x[1] - z.x[0] < 0.99) part.push(`length ${pctRange(z.x)}`);
     if (z.y[1] - z.y[0] < 0.99) part.push(`width ${pctRange(z.y)}`);
     if (z.z[1] - z.z[0] < 0.99) part.push(`height ${pctRange(z.z)}`);
-    lines.push(
-      `Photo ${z.photo} (${z.face}): ${z.type} (${z.severity}) — ${z.reason}. It is carried through the whole block, so ${part.join(", ") || "the full block"} is excluded.`,
-    );
+    const isThrough =
+      (z.y[1] - z.y[0] >= 0.99 && (z.face === "FRONT" || z.face === "BACK")) ||
+      (z.x[1] - z.x[0] >= 0.99 && (z.face === "LEFT" || z.face === "RIGHT")) ||
+      (z.z[1] - z.z[0] >= 0.99 && z.face === "TOP");
+    if (isThrough) {
+      lines.push(
+        `Photo ${z.photo} (${z.face}): ${z.type} (${z.severity}) — ${z.reason}. Through-crack carried through block body (${part.join(", ") || "full block"}).`,
+      );
+    } else {
+      lines.push(
+        `Photo ${z.photo} (${z.face}): ${z.type} (${z.severity}) — ${z.reason}. Surface defect trimmed to dressing depth on ${z.face} face (${part.join(", ")}).`,
+      );
+    }
   });
   const trims: string[] = [];
   const axis = (name: string, r: Range, g: number) => {
