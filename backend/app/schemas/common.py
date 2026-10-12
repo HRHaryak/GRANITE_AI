@@ -168,3 +168,31 @@ class CategoryCreate(BaseModel):
     code: str
     name: str
     description: str | None = None
+
+
+class CaptureGuidanceResponse(BaseModel):
+    requested_view: str | None = None
+    next_recommended_view: str | None = None
+    instruction: str = ""
+    reason: str = ""
+    existing_image_id: str | None = None
+    recapture_view_label: str | None = None
+    recommended_capture_side: str | None = None
+    instruction_type: str = "REQUESTED"
+    available_views: list[str] = Field(default_factory=list)
+    current_views: list[str] = Field(default_factory=list)
+    capture_side: str | None = None
+    status: str = "IN_PROGRESS"
+    validation: dict[str, Any] | None = None
+    instruction_override: str | None = None
+    current_view_label: str | None = None
+    recapture_required: bool | None = None
+    existing_view_replacement_required: bool | None = None
+    recapture_evidence_added: bool | None = None
+    inaccessible_surfaces: dict[str, Any] = Field(default_factory=dict)
+
+
+class BlockCaptureOut(BaseModel):
+    block: BlockOut
+    session: SessionOut | None = None
+    images: list[ImageOut] = Field(default_factory=list)

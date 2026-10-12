@@ -1,7 +1,9 @@
 FROM node:22-alpine
 WORKDIR /app
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci || npm install
 COPY . .
+RUN npm run build
+ENV NODE_ENV=production
 EXPOSE 3000
-CMD ["npm", "run", "dev"]
+CMD ["sh", "-c", "npx next start -p ${PORT:-3000}"]

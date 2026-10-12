@@ -8,6 +8,9 @@ from app.api.v1 import users as users_router
 from app.api.v1 import quarries as quarries_router
 from app.api.v1 import blocks as blocks_router
 from app.api.v1 import capture as capture_router
+from app.api.v1 import analysis as analysis_router
+from app.api.v1 import capabilities as capabilities_router
+from app.api.v1 import ai_assistant as ai_assistant_router
 
 settings = get_settings()
 
@@ -29,6 +32,9 @@ app.include_router(users_router.router)
 app.include_router(quarries_router.router)
 app.include_router(blocks_router.router)
 app.include_router(capture_router.router)
+app.include_router(analysis_router.router)
+app.include_router(capabilities_router.router)
+app.include_router(ai_assistant_router.router)
 
 
 @app.get("/health")

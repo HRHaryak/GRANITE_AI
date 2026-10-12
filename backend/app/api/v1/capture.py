@@ -163,6 +163,53 @@ def validate(image_id: str, db: Session = Depends(get_db), actor: DemoUser = Dep
     return ValidationOut.model_validate(result)
 
 
+@router.get("/capture-sessions/{session_id}/guidance", response_model_exclude_none=True)
+def get_capture_guidance(session_id: str, db: Session = Depends(get_db)):
+    """Get capture guidance for a session including AI recommendations."""
+    from app.schemas.common import CaptureGuidanceResponse
+    
+    session = db.get(CaptureSession, session_id)
+    if not session:
+        raise HTTPException(404, "Session not found")
+    
+    # Get images for this session
+    images = db.scalars(
+        select(BlockImage)
+        .where(BlockImage.capture_session_id == session_id, BlockImage.accepted.is_(True))
+    ).all()
+    
+    # Determine guidance based on capture progress
+    sides = {im.capture_side for im in images}
+    
+    # Get recommended next view based on what's missing
+    from app.models.enums import PRIMARY_SIDES, CaptureSide
+    missing = [s for s in PRIMARY_SIDES if s.value not in sides]
+    
+    guidance = CaptureGuidanceResponse(
+        requested_view=missing[0] if missing else None,
+        next_recommended_view=missing[0] if missing else None,
+        instruction=f"Please capture the {missing[0] if missing else 'required'} granite view(s).",
+        reason=f"{len(images)} images captured. {len(missing)} more views needed for full coverage.",
+        existing_image_id=None,
+        recapture_view_label=None,
+        recommended_capture_side=None,
+        instruction_type="REQUESTED",
+        available_views=[s.value for s in PRIMARY_SIDES],
+        current_views=list(sides),
+        capture_side=None,
+        status="IN_PROGRESS" if len(missing) > 0 else "COMPLETE",
+        validation=None,
+        instruction_override=None,
+        current_view_label=None,
+        recapture_required=None,
+        existing_view_replacement_required=None,
+        recapture_evidence_added=None,
+        inaccessible_surfaces={},
+    )
+    
+    return guidance
+
+
 @router.post("/capture-sessions/{session_id}/complete")
 def complete_session(session_id: str, db: Session = Depends(get_db), actor: DemoUser = Depends(require_selected_user)):
     session = db.get(CaptureSession, session_id)
