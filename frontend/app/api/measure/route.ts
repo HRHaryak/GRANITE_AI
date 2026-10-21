@@ -208,7 +208,6 @@ export async function POST(req: Request) {
     const text = await callClaude({
       system: SYSTEM,
       max_tokens: 5000,
-      temperature: 0,
       messages: [{ role: "user", content }],
     });
     const json = /\{[\s\S]*\}/.exec(text)?.[0];
