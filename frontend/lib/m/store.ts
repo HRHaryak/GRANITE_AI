@@ -86,6 +86,8 @@ export type BlockRecord = {
   reasoning?: string;
   consistency?: string;
   tape?: Dims;
+  /** Measurement method used: STANDARD (dressing allowance) or DEFECT_CARVE (3D defect avoidance). */
+  calcMode?: "STANDARD" | "DEFECT_CARVE";
   /** Final block geometry as fractions of the raw bounding box. */
   viz?: { zones: Prism[]; cuboid: Cuboid };
 };
@@ -285,6 +287,21 @@ export function nextBlockCode(): string {
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   const n = getBlocks().filter((b) => b.code.includes(ymd)).length + 1;
   return `BLK-${ymd}-${String(n).padStart(3, "0")}`;
+}
+
+export function generateUUID(): string {
+  if (typeof globalThis.crypto !== "undefined" && typeof globalThis.crypto.randomUUID === "function") {
+    try {
+      return globalThis.crypto.randomUUID();
+    } catch {
+      // fallback if restricted
+    }
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
 }
 
 export async function sha256(text: string): Promise<string> {
