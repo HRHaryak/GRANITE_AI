@@ -1,4 +1,4 @@
-﻿from functools import lru_cache
+from functools import lru_cache
 from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -60,6 +60,18 @@ class Settings(BaseSettings):
             for mime in self.allowed_image_mime_types.split(",")
             if mime.strip()
         }
+
+    @property
+    def normalized_database_url(self) -> str:
+        url = self.database_url
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql://", 1)
+        if url.startswith("postgresql://") and not url.startswith("postgresql+"):
+            try:
+                import psycopg2
+            except ImportError:
+                url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
 
 
 @lru_cache

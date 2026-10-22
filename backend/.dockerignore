@@ -21,7 +21,11 @@ docs
 *.log
 
 node_modules
+project_structure.txt
+*.backup*
+*.bak
 
+granitemeasure.db
 granitemeasure.db-journal
 granitemeasure.db-shm
 granitemeasure.db-wal

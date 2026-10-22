@@ -19,35 +19,59 @@ app = FastAPI(title="GraniteMeasure AI API")
 # Configure CORS using settings.cors_origin_list
 origins = settings.cors_origin_list
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if "*" in origins or settings.cors_origins.strip() == "*":
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=r"^https?://.*",
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins if origins else ["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-# Include API routers
-app.include_router(users_router.router)
-app.include_router(quarries_router.router)
-app.include_router(blocks_router.router)
-app.include_router(capture_router.router)
-app.include_router(analysis_router.router)
-app.include_router(capabilities_router.router)
-app.include_router(ai_assistant_router.router)
+# Include API routers at root and under /api/v1 prefix for compatibility
+routers = [
+    users_router.router,
+    quarries_router.router,
+    blocks_router.router,
+    capture_router.router,
+    analysis_router.router,
+    capabilities_router.router,
+    ai_assistant_router.router,
+]
+
+for router in routers:
+    app.include_router(router)
+    app.include_router(router, prefix="/api/v1")
+
+
+@app.get("/")
+def root():
+    return {
+        "name": "GraniteMeasure AI API",
+        "status": "online",
+        "docs": "/docs",
+        "health": "/health",
+    }
 
 
 @app.get("/health")
+@app.get("/api/v1/health")
 def health():
     return {"status": "ok"}
 
 
-# Optional startup event for logging
+# Optional startup event for logging and initialization
 @app.on_event("startup")
 def on_startup():
-    # Simple log to indicate startup
     print("GraniteMeasure AI backend starting up. CORS origins:", origins)
-    # Optionally initialize the database schema for local development
     try:
         if settings.database_init_mode and settings.database_init_mode.lower() == "create":
             from app.database.session import engine
@@ -58,3 +82,13 @@ def on_startup():
             print("Database tables created (if they were missing).")
     except Exception as e:
         print("Database initialization warning:", e)
+
+    if settings.seed_demo_users:
+        try:
+            from scripts.seed_demo import main as seed_demo_main
+
+            print("SEED_DEMO_USERS is true — seeding initial demo data...")
+            seed_demo_main()
+            print("Demo data seeded successfully.")
+        except Exception as e:
+            print("Demo seeding warning:", e)

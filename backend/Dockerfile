@@ -14,15 +14,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libxrender1 \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt /app/requirements.txt
 
 RUN python -m pip install --upgrade pip setuptools wheel && \
-    pip install -r /app/requirements.txt
+    pip install --no-cache-dir -r /app/requirements.txt
 
 COPY . /app
 
+# Ensure local storage directory exists
+RUN mkdir -p /app/storage
+
 EXPOSE 8000
 
+ENV PORT=8000
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --workers 1"]

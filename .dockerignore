@@ -1,18 +1,50 @@
+# Git & IDE
+.git
+.gitignore
+.idea
+.vscode
+
+# Environments
 venv
 .venv
-.idea
-backend
-mobile
-docs
+node_modules
+frontend/node_modules
+mobile/node_modules
+
+# Frontend & Mobile apps (backend Docker does not need these)
+frontend/
+mobile/
+
+# Documentation & large presentation media
+docs/
 *.pdf
 *.pptx
 *.ps1
-*.py
-*.md
-frontend/node_modules
-frontend/.next
-frontend/android
-frontend/.env.local
-frontend/.env*.local
-node_modules
-.git
+img.png
+FIX_SUMMARY.md
+MEASUREMENT_RESULTS.md
+walkthrough.md
+GRANITE_MEASURE_AI_WALKTHROUGH.md
+
+# Python caches
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+
+# Large backend scratch files and local databases
+backend/project_structure.txt
+backend/granitemeasure.db
+backend/granitemeasure.db-journal
+backend/granitemeasure.db-shm
+backend/granitemeasure.db-wal
+*.backup*
+*.bak
+*.log
+
+# Sensitive environment variables
+.env
+.env.*
+!.env.example
