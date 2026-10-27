@@ -8,7 +8,7 @@ import {
   Home,
   ScanLine,
   MessageCircle,
-  ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 
 const TABS = [
@@ -16,7 +16,7 @@ const TABS = [
   { href: "/m/blocks", label: "Blocks", icon: Boxes },
   { href: "/m/measure", label: "Measure", icon: Camera, fab: true },
   { href: "/m/analyse", label: "Analyse", icon: ScanLine },
-  { href: "/m/verify", label: "Verify", icon: ShieldCheck },
+  { href: "/m/ai", label: "AI", icon: Sparkles },
   { href: "/m/ask", label: "Ask", icon: MessageCircle },
 ];
 
